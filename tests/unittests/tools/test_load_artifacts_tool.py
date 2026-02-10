@@ -180,3 +180,65 @@ def test_get_declaration_with_json_schema_feature_enabled():
           },
       },
   }
+
+
+@mark.asyncio
+async def test_load_artifacts_parses_spreadsheet():
+  """Spreadsheet artifacts are parsed into markdown."""
+  artifact_name = 'test.xlsx'
+  
+  import pandas as pd
+  import io
+  
+  df = pd.DataFrame({'col1': [1, 2], 'col2': ['a', 'b']})
+  output = io.BytesIO()
+  # Use openpyxl as engine since it is in deps
+  with pd.ExcelWriter(output, engine='openpyxl') as writer:
+    df.to_excel(writer, sheet_name='Sheet1', index=False)
+  xlsx_bytes = output.getvalue()
+  
+  artifact = types.Part(
+      inline_data=types.Blob(
+          data=xlsx_bytes, 
+          mime_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+      )
+  )
+
+  tool_context = _StubToolContext({artifact_name: artifact})
+  llm_request = LlmRequest(
+      contents=[
+          types.Content(
+              role='user',
+              parts=[
+                  types.Part(
+                      function_response=types.FunctionResponse(
+                          name='load_artifacts',
+                          response={'artifact_names': [artifact_name]},
+                      )
+                  )
+              ],
+          )
+      ]
+  )
+
+  await load_artifacts_tool.process_llm_request(
+      tool_context=tool_context, llm_request=llm_request
+  )
+
+  artifact_part = llm_request.contents[-1].parts[1]
+  assert artifact_part.inline_data is None
+  
+  # Check for Markdown table content
+  # We expect something like:
+  # ### Sheet: Sheet1
+  #
+  # | col1 | col2 |
+  # | :--- | :--- |
+  # | 1    | a    |
+  # | 2    | b    |
+  
+  assert "Sheet1" in artifact_part.text
+  assert "col1" in artifact_part.text
+  assert "col2" in artifact_part.text
+  assert "1" in artifact_part.text
+  assert "a" in artifact_part.text

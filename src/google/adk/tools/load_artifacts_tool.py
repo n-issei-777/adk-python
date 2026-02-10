@@ -28,6 +28,9 @@ from ..features import FeatureName
 from ..features import is_feature_enabled
 from .base_tool import BaseTool
 
+import io
+import pandas as pd
+
 # MIME types Gemini accepts for inline data in requests.
 _GEMINI_SUPPORTED_INLINE_MIME_PREFIXES = (
     'image/',
@@ -39,6 +42,11 @@ _TEXT_LIKE_MIME_TYPES = frozenset({
     'application/csv',
     'application/json',
     'application/xml',
+})
+_SPREADSHEET_MIME_TYPES = frozenset({
+    'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', # .xlsx
+    'application/vnd.ms-excel', # .xls
+    'application/vnd.oasis.opendocument.spreadsheet', # .ods
 })
 
 if TYPE_CHECKING:
@@ -76,6 +84,35 @@ def _maybe_base64_to_bytes(data: str) -> bytes | None:
       return None
 
 
+def _parse_spreadsheet(data: bytes, mime_type: str) -> str:
+  """Parses a spreadsheet into a markdown representation."""
+  try:
+    # Load the spreadsheet
+    xl = pd.ExcelFile(io.BytesIO(data))
+    
+    output = []
+    
+    # Process each sheet
+    for sheet_name in xl.sheet_names:
+      df = xl.parse(sheet_name)
+      if df.empty:
+        continue
+        
+      # Convert to markdown table
+      markdown_table = df.to_markdown(index=False, numalign="left", stralign="left")
+      
+      output.append(f"### Sheet: {sheet_name}\n\n{markdown_table}")
+      
+    if not output:
+      return "[Empty Spreadsheet]"
+      
+    return "\n\n".join(output)
+    
+  except Exception as e:
+    logger.warning(f"Failed to parse spreadsheet: {e}")
+    return f"[Error parsing spreadsheet: {e}]"
+
+
 def _as_safe_part_for_llm(
     artifact: types.Part, artifact_name: str
 ) -> types.Part:
@@ -110,6 +147,10 @@ def _as_safe_part_for_llm(
       return types.Part.from_text(text=data.decode('utf-8'))
     except UnicodeDecodeError:
       return types.Part.from_text(text=data.decode('utf-8', errors='replace'))
+
+  if mime_type in _SPREADSHEET_MIME_TYPES:
+    text_content = _parse_spreadsheet(data, mime_type)
+    return types.Part.from_text(text=text_content)
 
   size_kb = len(data) / 1024
   return types.Part.from_text(
