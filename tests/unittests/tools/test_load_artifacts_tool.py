@@ -237,8 +237,10 @@ async def test_load_artifacts_parses_spreadsheet():
   # | 1    | a    |
   # | 2    | b    |
   
-  assert "Sheet1" in artifact_part.text
-  assert "col1" in artifact_part.text
-  assert "col2" in artifact_part.text
-  assert "1" in artifact_part.text
-  assert "a" in artifact_part.text
+  markdown_output = artifact_part.text
+
+  assert "Sheet1" in markdown_output
+  assert "| col1" in markdown_output
+  assert "| col2" in markdown_output
+  assert "| 1" in markdown_output and "| a" in markdown_output
+  assert "| 2" in markdown_output and "| b" in markdown_output

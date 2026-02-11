@@ -108,7 +108,7 @@ def _parse_spreadsheet(data: bytes) -> str:
       
     return "\n\n".join(output)
     
-  except Exception as e:
+  except (ValueError, ImportError) as e:
     logger.warning(f"Failed to parse spreadsheet: {e}")
     return f"[Error parsing spreadsheet: {e}]"
 
@@ -149,7 +149,7 @@ def _as_safe_part_for_llm(
       return types.Part.from_text(text=data.decode('utf-8', errors='replace'))
 
   if mime_type in _SPREADSHEET_MIME_TYPES:
-    text_content = _parse_spreadsheet(data, mime_type)
+    text_content = _parse_spreadsheet(data)
     return types.Part.from_text(text=text_content)
 
   size_kb = len(data) / 1024
