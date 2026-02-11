@@ -84,7 +84,7 @@ def _maybe_base64_to_bytes(data: str) -> bytes | None:
       return None
 
 
-def _parse_spreadsheet(data: bytes, mime_type: str) -> str:
+def _parse_spreadsheet(data: bytes) -> str:
   """Parses a spreadsheet into a markdown representation."""
   try:
     # Load the spreadsheet
